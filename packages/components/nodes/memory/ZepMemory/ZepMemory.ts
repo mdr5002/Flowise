@@ -1,4 +1,4 @@
-import { SystemChatMessage } from 'langchain/schema'
+import { SystemMessage } from 'langchain/schema'
 import { INode, INodeData, INodeParams } from '../../../src/Interface'
 import { getBaseClasses } from '../../../src/utils'
 import { ZepMemory, ZepMemoryInput } from 'langchain/memory/zep'
@@ -18,7 +18,7 @@ class ZepMemory_Memory implements INode {
         this.label = 'Zep Memory'
         this.name = 'ZepMemory'
         this.type = 'ZepMemory'
-        this.icon = 'memory.svg'
+        this.icon = 'zep.png'
         this.category = 'Memory'
         this.description = 'Summarizes the conversation and stores the memory in zep server'
         this.baseClasses = [this.type, ...getBaseClasses(ZepMemory)]
@@ -43,6 +43,20 @@ class ZepMemory_Memory implements INode {
                 default: '',
                 additionalParams: true,
                 optional: true
+            },
+            {
+                label: 'API Key',
+                name: 'apiKey',
+                type: 'password',
+                additionalParams: true,
+                optional: true
+            },
+            {
+                label: 'Size',
+                name: 'k',
+                type: 'number',
+                default: '10',
+                description: 'Window of size k to surface the last k back-and-forths to use as memory.'
             },
             {
                 label: 'Auto Summary Template',
@@ -98,6 +112,8 @@ class ZepMemory_Memory implements INode {
         const autoSummaryTemplate = nodeData.inputs?.autoSummaryTemplate as string
         const autoSummary = nodeData.inputs?.autoSummary as boolean
         const sessionId = nodeData.inputs?.sessionId as string
+        const apiKey = nodeData.inputs?.apiKey as string
+        const k = nodeData.inputs?.k as string
 
         const chatId = options?.chatId as string
 
@@ -110,6 +126,7 @@ class ZepMemory_Memory implements INode {
             memoryKey,
             inputKey
         }
+        if (apiKey) obj.apiKey = apiKey
 
         let zep = new ZepMemory(obj)
 
@@ -118,12 +135,12 @@ class ZepMemory_Memory implements INode {
         zep.loadMemoryVariables = async (values) => {
             let data = await tmpFunc.bind(zep, values)()
             if (autoSummary && zep.returnMessages && data[zep.memoryKey] && data[zep.memoryKey].length) {
-                const memory = await zep.zepClient.getMemory(zep.sessionId, 10)
+                const memory = await zep.zepClient.getMemory(zep.sessionId, parseInt(k, 10) ?? 10)
                 if (memory?.summary) {
                     let summary = autoSummaryTemplate.replace(/{summary}/g, memory.summary.content)
                     // eslint-disable-next-line no-console
                     console.log('[ZepMemory] auto summary:', summary)
-                    data[zep.memoryKey].unshift(new SystemChatMessage(summary))
+                    data[zep.memoryKey].unshift(new SystemMessage(summary))
                 }
             }
             // for langchain zep memory compatibility, or we will get "Missing value for input variable chat_history"
